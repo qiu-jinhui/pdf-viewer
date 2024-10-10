@@ -1,0 +1,481 @@
+<html><head><base href="https://doc-classifier.app/"><script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.9.359/pdf.min.js"></script>
+<style>
+  body, html {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    height: 100%;
+    display: flex;
+    overflow: hidden;
+  }
+  .left-section {
+    width: 300px;
+    background-color: #f0f0f0;
+    padding: 20px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .right-section {
+    flex-grow: 1;
+    padding: 20px;
+    box-sizing: border-box;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .stats {
+    margin-bottom: 20px;
+  }
+  .label-maintenance {
+    margin-top: 20px;
+  }
+  .pdf-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 20px;
+    flex-grow: 1;
+  }
+  .pdf-thumbnail {
+    width: 100%;
+    aspect-ratio: 3/4;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: transform 0.2s;
+    position: relative;
+  }
+  .pdf-thumbnail:hover {
+    transform: scale(1.05);
+  }
+  .pdf-thumbnail canvas {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .pdf-name {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: rgba(0,0,0,0.7);
+    color: white;
+    padding: 5px;
+    font-size: 12px;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .upload-section {
+    margin-top: auto;
+    padding-top: 20px;
+  }
+  #file-upload {
+    display: none;
+  }
+  .upload-btn {
+    display: inline-block;
+    padding: 10px 20px;
+    background-color: #4CAF50;
+    color: white;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+  }
+  .upload-btn:hover {
+    background-color: #45a049;
+  }
+  .pdf-space {
+    width: 100%;
+    height: 20px;
+    cursor: pointer;
+  }
+  .pdf-separator {
+    width: 100%;
+    height: 2px;
+    background-color: #000;
+    margin: 10px 0;
+  }
+  .labeling-page {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: white;
+    z-index: 1000;
+    padding: 20px;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .labeling-content {
+    display: flex;
+    height: calc(100% - 60px);
+  }
+  .labeling-left {
+    width: 300px;
+    overflow-y: auto;
+    padding-right: 20px;
+  }
+  .labeling-right {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .pdf-pages-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 10px;
+  }
+  .pdf-page-thumbnail {
+    width: 100%;
+    aspect-ratio: 3/4;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .pdf-page-thumbnail:hover {
+    transform: scale(1.05);
+  }
+  .pdf-page-thumbnail.selected {
+    border: 2px solid #4CAF50;
+  }
+  .selected-page-viewer {
+    flex-grow: 1;
+    border: 1px solid #ddd;
+    margin-bottom: 20px;
+    overflow: auto;
+  }
+  .labeling-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .labeling-controls select {
+    padding: 10px;
+    font-size: 16px;
+  }
+  .labeling-controls button {
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  @media (max-width: 768px) {
+    body {
+      flex-direction: column;
+    }
+    .left-section {
+      width: 100%;
+      height: auto;
+    }
+    .labeling-content {
+      flex-direction: column;
+    }
+    .labeling-left {
+      width: 100%;
+      height: 200px;
+      padding-right: 0;
+      padding-bottom: 20px;
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="left-section">
+    <div class="stats">
+      <h2>Document Statistics</h2>
+      <p>Total Documents: <span id="total-docs">0</span></p>
+      <p>Labeled Documents: <span id="labeled-docs">0</span></p>
+      <p>Unlabeled Documents: <span id="unlabeled-docs">0</span></p>
+    </div>
+    <div class="label-maintenance">
+      <h2>Label Maintenance</h2>
+      <input type="text" id="new-label" placeholder="New label name">
+      <button onclick="addLabel()">Add Label</button>
+      <ul id="label-list"></ul>
+    </div>
+    <div class="upload-section">
+      <input type="file" id="file-upload" accept=".pdf" multiple onchange="handleFileUpload(event)">
+      <label for="file-upload" class="upload-btn">Upload PDF(s)</label>
+    </div>
+  </div>
+  <div class="right-section">
+    <h2>Document Thumbnails</h2>
+    <div class="pdf-grid" id="pdf-grid"></div>
+  </div>
+
+  <div class="labeling-page" id="labeling-page">
+    <div class="labeling-content">
+      <div class="labeling-left">
+        <h3>PDF Pages</h3>
+        <div class="pdf-pages-grid" id="pdf-pages-grid"></div>
+      </div>
+      <div class="labeling-right">
+        <div class="selected-page-viewer" id="selected-page-viewer"></div>
+        <div class="labeling-controls">
+          <select id="label-select"></select>
+          <button onclick="applyLabel()">Apply Label</button>
+          <button onclick="closeLabelingPage()">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+let pdfs = [];
+let labels = ['Invoice', 'Contract', 'Report'];
+let labeledDocs = 0;
+let currentPdfIndex = -1;
+let currentPageIndex = 0;
+
+function updateStats() {
+  document.getElementById('total-docs').textContent = pdfs.length;
+  document.getElementById('labeled-docs').textContent = labeledDocs;
+  document.getElementById('unlabeled-docs').textContent = pdfs.length - labeledDocs;
+}
+
+function addLabel() {
+  const newLabel = document.getElementById('new-label').value.trim();
+  if (newLabel && !labels.includes(newLabel)) {
+    labels.push(newLabel);
+    updateLabelList();
+    updateLabelSelect();
+    document.getElementById('new-label').value = '';
+  }
+}
+
+function updateLabelList() {
+  const labelList = document.getElementById('label-list');
+  labelList.innerHTML = '';
+  labels.forEach(label => {
+    const li = document.createElement('li');
+    li.textContent = label;
+    labelList.appendChild(li);
+  });
+}
+
+function updateLabelSelect() {
+  const labelSelect = document.getElementById('label-select');
+  labelSelect.innerHTML = '';
+  labels.forEach(label => {
+    const option = document.createElement('option');
+    option.value = label;
+    option.textContent = label;
+    labelSelect.appendChild(option);
+  });
+}
+
+function createPdfThumbnail(pdfUrl, pdfName, index) {
+  const container = document.createElement('div');
+  container.className = 'pdf-container';
+
+  const thumbnail = document.createElement('div');
+  thumbnail.className = 'pdf-thumbnail';
+
+  pdfjsLib.getDocument(pdfUrl).promise.then(pdf => {
+    pdf.getPage(1).then(page => {
+      const scale = 1;
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport
+      };
+      page.render(renderContext);
+
+      thumbnail.appendChild(canvas);
+
+      const nameElement = document.createElement('div');
+      nameElement.className = 'pdf-name';
+      nameElement.textContent = pdfName;
+      thumbnail.appendChild(nameElement);
+    });
+  });
+
+  thumbnail.addEventListener('click', () => {
+    openLabelingPage(index);
+  });
+
+  container.appendChild(thumbnail);
+
+  if (index < pdfs.length - 1) {
+    const space = document.createElement('div');
+    space.className = 'pdf-space';
+    space.addEventListener('click', (e) => {
+      e.stopPropagation();
+      insertSeparator(index);
+    });
+    container.appendChild(space);
+  }
+
+  return container;
+}
+
+function insertSeparator(index) {
+  const pdfGrid = document.getElementById('pdf-grid');
+  const containers = pdfGrid.getElementsByClassName('pdf-container');
+  
+  if (containers[index].querySelector('.pdf-separator')) {
+    containers[index].removeChild(containers[index].querySelector('.pdf-separator'));
+  } else {
+    const separator = document.createElement('div');
+    separator.className = 'pdf-separator';
+    containers[index].appendChild(separator);
+  }
+}
+
+function adjustGridColumns() {
+  const pdfGrid = document.getElementById('pdf-grid');
+  const thumbnailWidth = 170; 
+  const gap = 20; 
+  const availableWidth = pdfGrid.clientWidth;
+  const columns = Math.floor(availableWidth / (thumbnailWidth + gap));
+  pdfGrid.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+}
+
+function handleFileUpload(event) {
+  const files = event.target.files;
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (file.type === 'application/pdf') {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const pdfUrl = e.target.result;
+        pdfs.push({name: file.name, url: pdfUrl, label: null});
+        const pdfGrid = document.getElementById('pdf-grid');
+        const thumbnail = createPdfThumbnail(pdfUrl, file.name, pdfs.length - 1);
+        pdfGrid.appendChild(thumbnail);
+        updateStats();
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+}
+
+function openLabelingPage(index) {
+  currentPdfIndex = index;
+  currentPageIndex = 0;
+  const labelingPage = document.getElementById('labeling-page');
+  const pdfPagesGrid = document.getElementById('pdf-pages-grid');
+  labelingPage.style.display = 'block';
+  
+  pdfPagesGrid.innerHTML = '';
+
+  pdfjsLib.getDocument(pdfs[index].url).promise.then(pdf => {
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      pdf.getPage(pageNum).then(page => {
+        const scale = 0.5;
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport
+        };
+        page.render(renderContext);
+
+        const thumbnail = document.createElement('div');
+        thumbnail.className = 'pdf-page-thumbnail';
+        thumbnail.appendChild(canvas);
+        thumbnail.addEventListener('click', () => selectPage(pageNum - 1));
+
+        pdfPagesGrid.appendChild(thumbnail);
+      });
+    }
+    selectPage(0);
+  });
+
+  const labelSelect = document.getElementById('label-select');
+  if (pdfs[index].label) {
+    labelSelect.value = pdfs[index].label;
+  } else {
+    labelSelect.selectedIndex = 0;
+  }
+}
+
+function selectPage(pageIndex) {
+  currentPageIndex = pageIndex;
+  const pdfPagesGrid = document.getElementById('pdf-pages-grid');
+  const thumbnails = pdfPagesGrid.getElementsByClassName('pdf-page-thumbnail');
+  
+  for (let i = 0; i < thumbnails.length; i++) {
+    thumbnails[i].classList.remove('selected');
+  }
+  thumbnails[pageIndex].classList.add('selected');
+
+  displaySelectedPage(pageIndex);
+}
+
+function displaySelectedPage(pageIndex) {
+  const selectedPageViewer = document.getElementById('selected-page-viewer');
+  selectedPageViewer.innerHTML = '';
+
+  pdfjsLib.getDocument(pdfs[currentPdfIndex].url).promise.then(pdf => {
+    pdf.getPage(pageIndex + 1).then(page => {
+      const scale = 1.5;
+      const viewport = page.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport
+      };
+      page.render(renderContext);
+
+      selectedPageViewer.appendChild(canvas);
+    });
+  });
+}
+
+function applyLabel() {
+  const labelSelect = document.getElementById('label-select');
+  const selectedLabel = labelSelect.value;
+  
+  if (currentPdfIndex !== -1 && selectedLabel) {
+    pdfs[currentPdfIndex].label = selectedLabel;
+    if (!pdfs[currentPdfIndex].isLabeled) {
+      labeledDocs++;
+      pdfs[currentPdfIndex].isLabeled = true;
+    }
+    updateStats();
+    closeLabelingPage();
+  }
+}
+
+function closeLabelingPage() {
+  const labelingPage = document.getElementById('labeling-page');
+  labelingPage.style.display = 'none';
+  currentPdfIndex = -1;
+  currentPageIndex = 0;
+}
+
+window.addEventListener('resize', adjustGridColumns);
+
+document.addEventListener('DOMContentLoaded', () => {
+  updateStats();
+  updateLabelList();
+  updateLabelSelect();
+  adjustGridColumns();
+});
+</script>
+</body>
+</html>
